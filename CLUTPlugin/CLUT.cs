@@ -110,7 +110,8 @@ namespace CLUT
         public enum PropertyNames
         {
             DirSetting,
-            DirFiles
+            DirFiles,
+            checkk
         }
 
         public enum Amount2Options
@@ -125,6 +126,7 @@ namespace CLUT
             props.Add(new StringProperty(PropertyNames.DirSetting, "", 255));
             Amount2Options Amount2Default = (Enum.IsDefined(typeof(Amount2Options), 0)) ? (Amount2Options)0 : 0;
             props.Add(StaticListChoiceProperty.CreateForEnum<Amount2Options>(PropertyNames.DirFiles, Amount2Default, false));
+            props.Add(new BooleanProperty(PropertyNames.checkk, true));
 
             return new PropertyCollection(props);
         }
@@ -135,6 +137,7 @@ namespace CLUT
 
             configUI.SetPropertyControlValue(PropertyNames.DirSetting, ControlInfoPropertyNames.DisplayName, "Directory");
             configUI.SetPropertyControlValue(PropertyNames.DirFiles, ControlInfoPropertyNames.DisplayName, "File");
+            configUI.SetPropertyControlValue(PropertyNames.checkk, ControlInfoPropertyNames.DisplayName, "Checkk");
             PropertyControlInfo Amount2Control = configUI.FindControlForPropertyName(PropertyNames.DirFiles);
             Amount2Control.SetValueDisplayName(Amount2Options.CLUTFilename, "");
 
@@ -155,6 +158,7 @@ namespace CLUT
         {
             DirSetting = newToken.GetProperty<StringProperty>(PropertyNames.DirSetting).Value;
             Filename = (byte)((int)newToken.GetProperty<StaticListChoiceProperty>(PropertyNames.DirFiles).Value);
+            Checkk = newToken.GetProperty<BooleanProperty>(PropertyNames.checkk).Value;
 
             base.OnSetRenderInfo(newToken, dstArgs, srcArgs);
         }
@@ -172,6 +176,7 @@ namespace CLUT
         #region UICode
         TextboxControl DirSetting = ""; // [0,255] Directory
         ListBoxControl Filename = 0; // File|
+        CheckboxControl Checkk = false; // [0,1] Display Clipping
         #endregion
 
         // Source: http://www.quelsolaar.com/technology/clut.html
@@ -182,17 +187,23 @@ namespace CLUT
             byte alpha = pixelColour.A;
 
             // Get R and G values
-            int x = ((pixelColour.R) / (level / 2));
-            int y = ((pixelColour.G) / (cubeSize / 2));
+            int x = (int)((pixelColour.R / 256.0) * cubeSize);
+            int y = (int)((pixelColour.G / 256.0) * level);
+
+            // Get B value from depth
+            int blue = (int)((pixelColour.B / 256.0) * clut.Width);
+            int xp = blue % level;
+            int yp = (blue / level);
+
+            // Blue offset 
+            x += cubeSize * xp;
+            y += level * yp;
 
             // Correct R value offset
             if (x > 0) x--;
 
-            // Get B value from depth
-            x += (pixelColour.B % clut.Width);
-            y += (pixelColour.B / clut.Height);
-
             pixelColour = clut.GetPixel(x, y);
+            //pixelColour = ColorBgra.FromBgra((byte)(xp), (byte)(yp), 0, alpha);
             pixelColour.A = alpha;
 
             return pixelColour;
@@ -217,7 +228,16 @@ namespace CLUT
                 {
                     currentPixel = src[x, y];
 
-                    currentPixel = correctPixel(currentPixel, clutBitmap, level);
+                    var prevPix = currentPixel;
+
+                    if (Checkk)
+                    {
+                        var nucl = correctPixel(currentPixel, clutBitmap, level);
+
+                        currentPixel = ColorBgra.FromBgra((byte)(nucl.B - prevPix.B), (byte)(nucl.G - prevPix.G), (byte)(nucl.R - prevPix.R), currentPixel.A);
+                    }
+                    else
+                        currentPixel = correctPixel(currentPixel, clutBitmap, level);
 
                     // Render to image pixels
                     dst[x, y] = currentPixel;
